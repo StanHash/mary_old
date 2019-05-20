@@ -1,0 +1,6 @@
+
+# generated files
+parser.yy
+parser.cpp
+parser.hpp
+stack.hh
