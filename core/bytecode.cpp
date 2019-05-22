@@ -146,7 +146,7 @@ ScrAnalysis analyse_script(Span<const ScrIns> script)
 			if (ins.has_operand())
 			{
 				slicePoints.insert(ins.operand);
-				result.labels.set(ins.operand, make_label_name(ins.offset));
+				result.labels.set(ins.operand, make_label_name(ins.operand));
 			}
 
 			slicePoints.insert(ins.offset + ins.encoded_size());
@@ -183,62 +183,6 @@ ScrAnalysis analyse_script(Span<const ScrIns> script)
 		}
 
 		result.linearChunks.set(itStart->offset, { itStart, scrIt });
-	}
-
-	return result;
-}
-
-std::vector<std::vector<ScrIns>> slice_script(Span<const ScrIns> script)
-{
-	std::vector<std::vector<ScrIns>> result;
-
-	std::set<std::size_t> slicePoints;
-
-	// Step 1: Find slice points
-
-	for (auto& ins : script)
-	{
-		if (ins.is_jump())
-		{
-			// jumps generate slices after themselves, and before the jump target
-
-			if (ins.has_operand())
-				slicePoints.insert(ins.operand);
-
-			slicePoints.insert(ins.offset + ins.encoded_size());
-		}
-		else if (ins.is_end())
-		{
-			// ends generate slices after themselves
-
-			slicePoints.insert(ins.offset + ins.encoded_size());
-		}
-	}
-
-	// Step 2: Slice
-
-	auto it      = script.begin();
-	auto sliceIt = slicePoints.begin();
-
-	while (it != script.end())
-	{
-		auto itStart = it;
-
-		if (sliceIt != slicePoints.end())
-		{
-			auto sliceOffset = *sliceIt++;
-
-			it = std::find_if(itStart, script.end(), [sliceOffset] (auto& ins)
-			{
-				return ins.offset >= sliceOffset;
-			});
-		}
-		else
-		{
-			it = script.end();
-		}
-
-		result.emplace_back(itStart, it);
 	}
 
 	return result;

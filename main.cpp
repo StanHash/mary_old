@@ -33,10 +33,82 @@ void print_expression(std::ostream& out, const ScrExpr& expr)
 		out << ")";
 		break;
 
+	case SCR_EXPR_SUB:
+		out << "(";
+		print_expression(out, *expr.compound.children[0]);
+		out << " - ";
+		print_expression(out, *expr.compound.children[1]);
+		out << ")";
+		break;
+
+	case SCR_EXPR_MUL:
+		out << "(";
+		print_expression(out, *expr.compound.children[0]);
+		out << " * ";
+		print_expression(out, *expr.compound.children[1]);
+		out << ")";
+		break;
+
+	case SCR_EXPR_DIV:
+		out << "(";
+		print_expression(out, *expr.compound.children[0]);
+		out << " / ";
+		print_expression(out, *expr.compound.children[1]);
+		out << ")";
+		break;
+
+	case SCR_EXPR_MOD:
+		out << "(";
+		print_expression(out, *expr.compound.children[0]);
+		out << " % ";
+		print_expression(out, *expr.compound.children[1]);
+		out << ")";
+		break;
+
 	case SCR_EXPR_EQU:
 		print_expression(out, *expr.compound.children[0]);
 		out << " = ";
 		print_expression(out, *expr.compound.children[1]);
+		break;
+
+	case SCR_EXPR_ADDEQU:
+		print_expression(out, *expr.compound.children[0]);
+		out << " += ";
+		print_expression(out, *expr.compound.children[1]);
+		break;
+
+	case SCR_EXPR_SUBEQU:
+		print_expression(out, *expr.compound.children[0]);
+		out << " -= ";
+		print_expression(out, *expr.compound.children[1]);
+		break;
+
+	case SCR_EXPR_MULEQU:
+		print_expression(out, *expr.compound.children[0]);
+		out << " *= ";
+		print_expression(out, *expr.compound.children[1]);
+		break;
+
+	case SCR_EXPR_DIVEQU:
+		print_expression(out, *expr.compound.children[0]);
+		out << " /= ";
+		print_expression(out, *expr.compound.children[1]);
+		break;
+
+	case SCR_EXPR_MODEQU:
+		print_expression(out, *expr.compound.children[0]);
+		out << " %= ";
+		print_expression(out, *expr.compound.children[1]);
+		break;
+
+	case SCR_EXPR_NEG:
+		out << "-";
+		print_expression(out, *expr.compound.children[0]);
+		break;
+
+	case SCR_EXPR_NOT:
+		out << "!";
+		print_expression(out, *expr.compound.children[0]);
 		break;
 
 	case SCR_EXPR_FUNC:
