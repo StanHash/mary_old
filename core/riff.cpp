@@ -7,7 +7,7 @@
 
 namespace mary {
 
-Riff unpack_riff(const std::vector<unsigned char>& data)
+Riff unpack_riff(Span<const byte_type> data)
 {
 	std::size_t readOffset = 0;
 
@@ -31,14 +31,14 @@ Riff unpack_riff(const std::vector<unsigned char>& data)
 		return (data[readOffset-4]) + (data[readOffset-3] << 8) + (data[readOffset-2] << 16) + (data[readOffset-1] << 24);
 	};
 
-	auto read_data = [&data, &readOffset] (std::size_t size) -> std::vector<unsigned char>
+	auto read_data = [&data, &readOffset] (std::size_t size) -> std::vector<byte_type>
 	{
 		readOffset += size;
 
 		if (readOffset > data.size())
 			throw std::runtime_error("unexpectedly reached end of data"); // TODO: better error
 
-		return std::vector<unsigned char>(data.cbegin() + readOffset - size, data.cbegin() + readOffset);
+		return std::vector<byte_type>(data.cbegin() + readOffset - size, data.cbegin() + readOffset);
 	};
 
 	Riff result;
@@ -65,7 +65,7 @@ Riff unpack_riff(const std::vector<unsigned char>& data)
 
 Riff unpack_riff(std::istream& in)
 {
-	std::array<unsigned char, 8> header;
+	std::array<byte_type, 8> header;
 
 	// Read header, to get data size
 
@@ -79,7 +79,7 @@ Riff unpack_riff(std::istream& in)
 
 	// Construct data
 
-	std::vector<unsigned char> data(size + 8);
+	std::vector<byte_type> data(size + 8);
 
 	// Read rest of data
 	if (!in.read(reinterpret_cast<char*>(data.data()) + 8, size))
@@ -105,9 +105,9 @@ Riff unpack_riff(const std::string& fileName, std::uint64_t offset)
 	return unpack_riff(file);
 }
 
-std::vector<unsigned char> pack_riff(const Riff& riff)
+std::vector<byte_type> pack_riff(const Riff& riff)
 {
-	std::vector<unsigned char> result(std::accumulate(riff.chunks.begin(), riff.chunks.end(), 12,
+	std::vector<byte_type> result(std::accumulate(riff.chunks.begin(), riff.chunks.end(), 12,
 		[] (std::size_t value, const RiffChunk& chunk)
 		{
 			return value + 8 + chunk.data.size();
@@ -139,7 +139,7 @@ std::vector<unsigned char> pack_riff(const Riff& riff)
 		result[writeOffset-1] = 0xFF & (size >> 24);
 	};
 
-	auto write_data = [&result, &writeOffset] (const std::vector<unsigned char>& data)
+	auto write_data = [&result, &writeOffset] (Span<const byte_type> data)
 	{
 		writeOffset += data.size();
 

@@ -2,6 +2,7 @@
 #define MARY_SCRIPT_BYTECODE_H
 
 #include "core/types.h"
+#include "core/offset-map.h"
 
 #include <string>
 #include <vector>
@@ -53,7 +54,7 @@ enum
 	SCR_OPCODE_MAX,
 };
 
-struct ScrOpcodeInfo
+struct ScrOpcodeClass
 {
 	std::string mnemonic;
 
@@ -64,13 +65,13 @@ struct ScrOpcodeInfo
 	bool isEnd = false;
 };
 
-extern const ScrOpcodeInfo gScrOpcodeInfo[SCR_OPCODE_MAX];
-extern const ScrOpcodeInfo gScrOpcodeErrInfo;
+extern const ScrOpcodeClass gScrOpcodeClass[SCR_OPCODE_MAX];
+extern const ScrOpcodeClass gScrOpcodeErrClass;
 
 inline
-const ScrOpcodeInfo& get_opcode_info(unsigned opcodeClass)
+const ScrOpcodeClass& get_opcode_class(unsigned opcode)
 {
-	return opcodeClass < SCR_OPCODE_MAX ? gScrOpcodeInfo[opcodeClass] : gScrOpcodeErrInfo;
+	return (opcode < SCR_OPCODE_MAX) ? gScrOpcodeClass[opcode] : gScrOpcodeErrClass;
 }
 
 struct ScrIns
@@ -84,25 +85,25 @@ struct ScrIns
 	inline
 	const std::string& mnemonic() const
 	{
-		return get_opcode_info(opcode).mnemonic;
+		return get_opcode_class(opcode).mnemonic;
 	}
 
 	inline
 	unsigned operand_size() const
 	{
-		return get_opcode_info(opcode).operandSize;
+		return get_opcode_class(opcode).operandSize;
 	}
 
 	inline
 	bool is_jump() const
 	{
-		return get_opcode_info(opcode).isJump;
+		return get_opcode_class(opcode).isJump;
 	}
 
 	inline
 	bool is_end() const
 	{
-		return get_opcode_info(opcode).isEnd;
+		return get_opcode_class(opcode).isEnd;
 	}
 
 	inline
@@ -117,25 +118,38 @@ struct ScrIns
 		return 1 + operand_size();
 	}
 
-	std::size_t offset = 0;
+	unsigned offset = 0;
 	std::uint32_t operand = 0;
 	std::uint8_t opcode = 0;
 	bool xUsed = false; // TODO: figure out
 };
 
-std::vector<ScrIns> decode_script(const byte_type* begin, const byte_type* end);
-std::vector<byte_type> encode_script(const std::vector<ScrIns>& script);
+std::vector<ScrIns> decode_script(Span<const byte_type> bytes);
+std::vector<byte_type> encode_script(Span<const ScrIns> script);
 
-std::vector<std::vector<ScrIns>> slice_script(const std::vector<ScrIns>& script); // TODO: maybe generate a more detailed analysis?
+struct ScrAnalysis
+{
+	OffsetMap<Span<const ScrIns>> linearChunks;
+	NameMap labels;
+};
 
 inline
-unsigned get_script_offset(const std::vector<ScrIns>& script)
+std::string make_label_name(unsigned offset)
+{
+	return std::string("loc_") + std::to_string(offset);
+}
+
+ScrAnalysis analyse_script(Span<const ScrIns> script);
+std::vector<std::vector<ScrIns>> slice_script(Span<const ScrIns> script); // TODO: maybe generate a more detailed analysis?
+
+inline
+unsigned get_script_offset(Span<const ScrIns> script)
 {
 	return script.empty() ? 0 : script.front().offset;
 }
 
 inline
-unsigned get_script_length(const std::vector<ScrIns>& script)
+unsigned get_script_length(Span<const ScrIns> script)
 {
 	return script.empty() ? 0 : (script.back().offset + script.back().encoded_size() - script.front().offset);
 }

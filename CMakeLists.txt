@@ -39,6 +39,8 @@ set(SOURCE_LIST
     "core/bytecode.h"
     "core/bytecode.cpp"
 
+    "core/offset-map.h"
+
     "ast/scr-statement.h"
     "ast/scr-expression.h"
 
@@ -49,9 +51,9 @@ set(SOURCE_LIST
 
     "ast/function.h"
 
-	"lang/parse.h"
+    "lang/parse.h"
 
-	"lang/parser.cpp"
+    "lang/parser.cpp"
 )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})

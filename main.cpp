@@ -1,18 +1,12 @@
 
-#include <iostream>
-#include <cstring>
-#include <vector>
-
-#include <memory>
-#include <set>
-#include <list>
-#include <array>
-#include <iomanip>
-
 #include "core/riff.h"
 #include "core/bytecode.h"
+#include "core/offset-map.h"
 #include "ast/scr-pattern.h"
 #include "lang/parse.h"
+
+#include <iostream>
+#include <cstring>
 
 namespace mary {
 
@@ -67,7 +61,7 @@ void print_opcode_statement(std::ostream& out, const ScrStatement& statement)
 	if (statement.stmtClass >= SCR_OPCODE_MAX)
 		throw std::runtime_error("tried to print a complex statement as a core instruction"); // TODO: better error
 
-	out << get_opcode_info(statement.stmtClass).mnemonic;
+	out << get_opcode_class(statement.stmtClass).mnemonic;
 
 	for (auto& expr : statement.children)
 	{
@@ -78,6 +72,11 @@ void print_opcode_statement(std::ostream& out, const ScrStatement& statement)
 
 void print_statement(std::ostream& out, const ScrStatement& statement)
 {
+	if (statement.has_label())
+		std::cout << statement.label << ": " << std::endl;
+
+	std::cout << "    ";
+
 	if (statement.stmtClass < SCR_OPCODE_MAX)
 	{
 		print_opcode_statement(out, statement);
@@ -97,7 +96,7 @@ void print_statement(std::ostream& out, const ScrStatement& statement)
 	out << ";" << std::endl; // /* " << statement.stmtClass << " */" << std::endl;
 }
 
-ScrStatement make_statement(const ScrIns& ins)
+ScrStatement make_statement(const NameMap& labels, const ScrIns& ins)
 {
 	switch (ins.opcode)
 	{
@@ -108,19 +107,50 @@ ScrStatement make_statement(const ScrIns& ins)
 
 	default:
 		if (ins.has_operand())
+		{
+			if (ins.is_jump())
+			{
+				// pulling operand from labels instead of using the offset
+
+				ScrStatement result(ins.opcode);
+
+				labels.for_at(ins.operand, [&] (auto&)
+				{
+					// TODO: make_identifier_expr(name, SCR_VALTYPE_LABEL);
+					result.children.push_back(make_literal_expr(ins.operand));
+				});
+
+				return result;
+			}
+
 			return ScrStatement(ins.opcode, make_literal_expr(ins.operand));
+		}
 
 		return ScrStatement(ins.opcode);
 
 	} // switch (ins.opcode)
 }
 
-std::vector<ScrStatement> make_statements(const Span<ScrIns>& script)
+std::vector<ScrStatement> make_statements(const NameMap& labels, Span<const ScrIns> script)
 {
 	std::vector<ScrStatement> result;
 
+	// TODO: more efficient label check (iterate linearily instead of bsearching for each statement)
+
+	auto makeStatement = [&labels] (auto& ins)
+	{
+		auto result = make_statement(labels, ins);
+
+		labels.for_at(ins.offset, [&result] (const std::string& name)
+		{
+			result.label = name;
+		});
+
+		return result;
+	};
+
 	for (auto& ins : script)
-		result.push_back(make_statement(ins));
+		result.push_back(makeStatement(ins));
 
 	return result;
 }
@@ -171,7 +201,7 @@ int main(int argc, char** argv)
 {
 	auto options = parse_arguments(argv + 1, argv + argc);
 
-	auto error = [argv] ()
+	auto argError = [argv] ()
 	{
 		print_usage(std::cerr, argv[0]);
 		return 1;
@@ -184,7 +214,7 @@ int main(int argc, char** argv)
 	}
 
 	if (options.positionals.size() == 0)
-		return error();
+		return argError();
 
 	if (options.positionals[0] == "anal")
 	{
@@ -206,18 +236,17 @@ int main(int argc, char** argv)
 		 */
 
 		if (options.positionals.size() <= 3)
-			return error();
+			return argError();
 
-		try {
+		try
+		{
 			std::string romPath = options.positionals[1];
-
-			std::uint64_t romOffset = (options.positionals.size() > 2)
-				? 0x1FFFFFF & (std::stoll(options.positionals[2], nullptr, 0))
-				: 0;
+			std::uint64_t romOffset = std::stoll(options.positionals[2], nullptr, 0) & 0x1FFFFFF;
+			std::string definitionsPath = options.positionals[3];
 
 			auto riff = mary::unpack_riff(romPath, romOffset);
+			auto funcs = mary::parse_file(definitionsPath).functions;
 
-			auto funcs = mary::parse_file(options.positionals[3]).functions;
 			auto funcPatterns = mary::pattern::get_function_patterns(funcs);
 			auto rules = mary::pattern::get_decompile_rules(funcPatterns);
 
@@ -225,18 +254,18 @@ int main(int argc, char** argv)
 			{
 				if (chunk.name == "CODE")
 				{
-					auto script = mary::decode_script(chunk.data.data() + 4, chunk.data.data() + chunk.data.size());
-					auto slices = mary::slice_script(script);
+					auto script = mary::decode_script({ chunk.data.data() + 4, chunk.data.size() - 4});
+					auto anal = mary::analyse_script(script);
 
-					for (auto& chunk : slices)
+					for (auto& chunk : anal.linearChunks)
 					{
-						std::cout << "loc_" << mary::get_script_offset(chunk) << ":" << std::endl;
-
 						auto statements = mary::pattern::reduce_statements(
-							rules, mary::make_statements(chunk));
+							rules, mary::make_statements(anal.labels, chunk.second));
 
 						for (auto& stmt : statements)
 							mary::print_statement(std::cout, stmt);
+
+						std::cout << "/* ------------ */" << std::endl;
 					}
 				}
 			}

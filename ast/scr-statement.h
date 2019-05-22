@@ -28,12 +28,16 @@ struct ScrStatement
 	ScrStatement(unsigned id, std::unique_ptr<ScrExpr>&& child)
 		: stmtClass(id) { children.push_back(std::move(child)); }
 
-	ScrStatement(unsigned id, Span<std::unique_ptr<ScrExpr>>&& child)
+	ScrStatement(unsigned id, Span<std::unique_ptr<ScrExpr>> child)
 		: children(std::make_move_iterator(child.begin()), std::make_move_iterator(child.end())), stmtClass(id) {}
+
+	bool has_label() const noexcept { return !label.empty(); }
 
 	std::vector<std::unique_ptr<ScrExpr>> children;
 
 	unsigned stmtClass;
+
+	std::string label; // TODO: better
 };
 
 using StatementSpan = Span<ScrStatement>;

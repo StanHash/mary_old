@@ -36,8 +36,8 @@ unsigned get_named_type(const std::string& name)
 	if (name == "memaddr")
 		return SCR_VALTYPE_MEMADDR;
 
-	if (name == "insaddr")
-		return SCR_VALTYPE_INSADDR;
+	if (name == "label")
+		return SCR_VALTYPE_LABEL;
 
 	return SCR_VALTYPE_ANY;
 }

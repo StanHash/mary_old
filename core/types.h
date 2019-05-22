@@ -13,18 +13,36 @@ using byte_type = std::uint8_t;
 template<typename Type>
 struct Span
 {
+	using element_type = Type;
+	using value_type = std::remove_cv_t<Type>;
+
+	using index_type = std::size_t;
+	using difference_type = std::ptrdiff_t;
+
+	using pointer = Type*;
+	using const_pointer = const Type*;
+
+	using reference = Type&;
+	using const_reference = const Type&;
+
+	using iterator = pointer;
+	using const_iterator = const_pointer;
+
+	using reverse_iterator = std::reverse_iterator<iterator>;
+	using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
 	constexpr Span() noexcept
 		: mBegin(nullptr), mSize(0) {}
 
-	constexpr Span(Type* first, std::size_t count)
+	constexpr Span(Type* first, std::size_t count) noexcept
 		: mBegin(first), mSize(count) {}
 
-	constexpr Span(Type* first, Type* last)
+	constexpr Span(Type* first, Type* last) noexcept
 		: mBegin(first), mSize(last - first) {}
 
 	template<std::size_t N>
-	constexpr Span(Type (&patterns)[N]) noexcept
-		: mBegin(patterns), mSize(N) {}
+	constexpr Span(Type (&arr)[N]) noexcept
+		: mBegin(arr), mSize(N) {}
 
 	template<std::size_t N>
 	constexpr Span(std::array<Type, N>& arr) noexcept
@@ -45,11 +63,17 @@ struct Span
 	constexpr Span(const Span& other) noexcept = default;
 	constexpr Span& operator=(const Span& other) noexcept = default;
 
-	Type* begin() const noexcept { return mBegin; }
-	const Type* cbegin() const noexcept { return mBegin; }
+	constexpr iterator begin() const noexcept { return mBegin; }
+	constexpr const_iterator cbegin() const noexcept { return mBegin; }
 
-	Type* end() const noexcept { return mBegin+mSize; }
-	const Type* cend() const noexcept { return mBegin+mSize; }
+	constexpr iterator end() const noexcept { return mBegin+mSize; }
+	constexpr const_iterator cend() const noexcept { return mBegin+mSize; }
+
+	constexpr reverse_iterator rbegin() const noexcept { return std::make_reverse_iterator(end()); }
+	constexpr const_reverse_iterator crbegin() const noexcept { return std::make_reverse_iterator(cend()); }
+
+	constexpr reverse_iterator rend() const noexcept { return std::make_reverse_iterator(begin()); }
+	constexpr const_reverse_iterator crend() const noexcept { return std::make_reverse_iterator(cbegin()); }
 
 	constexpr Type* data() const noexcept { return mBegin; }
 

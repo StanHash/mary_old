@@ -175,9 +175,14 @@ std::vector<ScrStatement> reduce_statements(const Span<pattern::PatternRule>& ru
 			if (pattern::match(rule.from, inSpan))
 			{
 				auto exprs = pattern::extract_wildcards(rule.from, inSpan);
+				auto label = std::move(inSpan.front().label);
 
 				result.resize(result.size() - stmtCount + rule.to.statement_count());
-				pattern::construct(std::prev(result.end(), rule.to.statement_count()), rule.to, exprs);
+
+				auto out = std::prev(result.end(), rule.to.statement_count());
+
+				pattern::construct(out, rule.to, exprs);
+				out->label = label;
 
 				break;
 			}

@@ -6,7 +6,7 @@
 
 namespace mary {
 
-const ScrOpcodeInfo gScrOpcodeInfo[SCR_OPCODE_MAX] = {
+const ScrOpcodeClass gScrOpcodeClass[SCR_OPCODE_MAX] = {
 	{ "nop",     0 },
 	{ "equ",    -1 },
 	{ "addequ", -1 },
@@ -27,7 +27,7 @@ const ScrOpcodeInfo gScrOpcodeInfo[SCR_OPCODE_MAX] = {
 	{ "not",     0 },
 	{ "cmp",    -1 },
 	{ "pushm",  +1, 4 },
-	{ "equimm", -1, 4 },
+	{ "popm",   -1, 4 },
 	{ "dup",    +1 },
 	{ "pop",    -1 },
 	{ "push",   +1, 4 },
@@ -46,60 +46,61 @@ const ScrOpcodeInfo gScrOpcodeInfo[SCR_OPCODE_MAX] = {
 	{ "switch", -1, 4 },
 };
 
-const ScrOpcodeInfo gScrOpcodeErrInfo = { "err?", 0, 0, false, true };
+const ScrOpcodeClass gScrOpcodeErrClass = { "err?", 0, 0, false, true };
 
 struct ScrInsDecoder
 {
-	ScrInsDecoder(const byte_type* b, const byte_type* e)
-		: begin(b), end(e), it(b) {}
+	constexpr ScrInsDecoder(Span<const byte_type> range)
+		: range(range), it(range.begin()) {}
 
-	ScrIns decode(void);
-	bool at_end(void) const { return it == end; }
+	bool at_end(void) const
+	{
+		return it == range.end();
+	}
+
+	ScrIns decode()
+	{
+		ScrIns result;
+
+		// TODO: err if reaching past end
+
+		result.offset = baseOffset + std::distance(range.begin(), it);
+		result.opcode = *it++;
+
+		if (result.opcode & 0x80)
+		{
+			result.opcode &= 0x7F;
+			result.xUsed = true;
+		}
+
+		if (!result.is_valid())
+		{
+			using namespace std::string_literals;
+
+			throw std::runtime_error(
+				"failed to decode instruction at "s + std::to_string(result.offset)); // TODO: better error
+		}
+
+		for (unsigned i = 0; i < result.operand_size(); ++i)
+		{
+			result.operand += (*it++) << (i*8);
+		}
+
+		return result;
+	}
 
 	std::size_t baseOffset = 0;
 
 protected:
-	const byte_type* begin;
-	const byte_type* end;
-	const byte_type* it;
+	Span<const byte_type> range;
+	Span<const byte_type>::const_iterator it;
 };
 
-ScrIns ScrInsDecoder::decode(void)
-{
-	ScrIns result;
-
-	// TODO: err if reaching past end
-
-	result.offset = baseOffset + std::distance(begin, it);
-	result.opcode = *it++;
-
-	if (result.opcode & 0x80)
-	{
-		result.opcode &= 0x7F;
-		result.xUsed = true;
-	}
-
-	if (!result.is_valid())
-	{
-		using namespace std::string_literals;
-
-		throw std::runtime_error(
-			"failed to decode instruction at "s + std::to_string(result.offset)); // TODO: better error
-	}
-
-	for (unsigned i = 0; i < result.operand_size(); ++i)
-	{
-		result.operand += (*it++) << (i*8);
-	}
-
-	return result;
-}
-
-std::vector<ScrIns> decode_script(const byte_type* begin, const byte_type* end)
+std::vector<ScrIns> decode_script(Span<const byte_type> bytes)
 {
 	std::vector<ScrIns> result;
 
-	ScrInsDecoder decoder(begin, end);
+	ScrInsDecoder decoder(bytes);
 
 	while (!decoder.at_end())
 		result.push_back(decoder.decode());
@@ -107,7 +108,7 @@ std::vector<ScrIns> decode_script(const byte_type* begin, const byte_type* end)
 	return result;
 }
 
-std::vector<byte_type> encode_script(const std::vector<ScrIns>& script)
+std::vector<byte_type> encode_script(Span<const ScrIns> script)
 {
 	std::vector<byte_type> result(get_script_length(script));
 	auto baseOffset = get_script_offset(script);
@@ -125,7 +126,69 @@ std::vector<byte_type> encode_script(const std::vector<ScrIns>& script)
 	return result;
 }
 
-std::vector<std::vector<ScrIns>> slice_script(const std::vector<ScrIns>& script)
+ScrAnalysis analyse_script(Span<const ScrIns> script)
+{
+	ScrAnalysis result;
+
+	std::set<std::size_t> slicePoints;
+
+	// Step 1: Find slice points
+
+	for (auto& ins : script)
+	{
+		if (ins.is_jump())
+		{
+			// jumps generate:
+			// a slice after themselves
+			// a slice before the jump target
+			// a label before the jump target
+
+			if (ins.has_operand())
+			{
+				slicePoints.insert(ins.operand);
+				result.labels.set(ins.operand, make_label_name(ins.offset));
+			}
+
+			slicePoints.insert(ins.offset + ins.encoded_size());
+		}
+		else if (ins.is_end())
+		{
+			// ends generate slices after themselves
+
+			slicePoints.insert(ins.offset + ins.encoded_size());
+		}
+	}
+
+	// Step 2: Slice
+
+	auto scrIt   = script.begin();
+	auto sliceIt = slicePoints.begin();
+
+	while (scrIt != script.end())
+	{
+		auto itStart = scrIt;
+
+		if (sliceIt != slicePoints.end())
+		{
+			auto sliceOffset = *sliceIt++;
+
+			scrIt = std::find_if(itStart, script.end(), [sliceOffset] (auto& ins)
+			{
+				return ins.offset >= sliceOffset;
+			});
+		}
+		else
+		{
+			scrIt = script.end();
+		}
+
+		result.linearChunks.set(itStart->offset, { itStart, scrIt });
+	}
+
+	return result;
+}
+
+std::vector<std::vector<ScrIns>> slice_script(Span<const ScrIns> script)
 {
 	std::vector<std::vector<ScrIns>> result;
 

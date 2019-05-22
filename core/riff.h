@@ -1,6 +1,8 @@
 #ifndef MARY_RIFF_H
 #define MARY_RIFF_H
 
+#include "core/types.h"
+
 #include <vector>
 #include <string>
 #include <cstdint>
@@ -31,11 +33,11 @@ struct Riff
 	std::vector<RiffChunk> chunks;
 };
 
-Riff unpack_riff(const std::vector<unsigned char>& data);
+Riff unpack_riff(Span<const byte_type> data);
 Riff unpack_riff(std::istream& in);
 Riff unpack_riff(const std::string& fileName, std::size_t offset);
 
-std::vector<unsigned char> pack_riff(const Riff& riff);
+std::vector<byte_type> pack_riff(const Riff& riff);
 
 } // namespace mary
 
