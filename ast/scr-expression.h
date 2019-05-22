@@ -18,6 +18,7 @@ enum
 
 	// No children
 	SCR_EXPR_LITERAL,
+	SCR_EXPR_NAMED,
 
 	// 1 child (unary operators)
 	SCR_EXPR_DEREF,
@@ -60,6 +61,14 @@ struct ScrValue
 {
 	std::int32_t value;
 	unsigned     typeClass;
+
+	bool operator < (const ScrValue& other) const
+	{
+		if (typeClass < other.typeClass)
+			return true;
+
+		return value < other.value;
+	}
 };
 
 struct ScrExpr
@@ -74,9 +83,15 @@ struct ScrExpr
 	}
 
 	inline
+	bool is_named() const
+	{
+		return exprClass == SCR_EXPR_NAMED;
+	}
+
+	inline
 	bool is_compound() const
 	{
-		return exprClass != SCR_EXPR_LITERAL;
+		return exprClass != SCR_EXPR_LITERAL && exprClass != SCR_EXPR_NAMED;
 	}
 
 	inline
@@ -90,6 +105,9 @@ struct ScrExpr
 
 	// Literal
 	ScrValue literal;
+
+	// Named
+	std::string named;
 
 	// Compound
 	struct
@@ -120,6 +138,16 @@ std::unique_ptr<ScrExpr> make_literal_expr(std::size_t value, unsigned type = SC
 
 	result->literal.value     = value;
 	result->literal.typeClass = type;
+
+	return result;
+}
+
+inline
+std::unique_ptr<ScrExpr> make_named_expr(std::string&& value)
+{
+	auto result = std::make_unique<ScrExpr>(SCR_EXPR_NAMED);
+
+	result->named = std::move(value);
 
 	return result;
 }

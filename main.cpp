@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <cstring>
+#include <map>
 
 namespace mary {
 
@@ -17,6 +18,10 @@ void print_expression(std::ostream& out, const ScrExpr& expr)
 
 	case SCR_EXPR_LITERAL:
 		out << expr.literal.value;
+		break;
+
+	case SCR_EXPR_NAMED:
+		out << expr.named;
 		break;
 
 	case SCR_EXPR_DEREF:
@@ -186,10 +191,9 @@ ScrStatement make_statement(const NameMap& labels, const ScrIns& ins)
 
 				ScrStatement result(ins.opcode);
 
-				labels.for_at(ins.operand, [&] (auto&)
+				labels.for_at(ins.operand, [&] (auto& name)
 				{
-					// TODO: make_identifier_expr(name, SCR_VALTYPE_LABEL);
-					result.children.push_back(make_literal_expr(ins.operand));
+					result.children.push_back(make_named_expr(std::string(name)));
 				});
 
 				return result;
@@ -225,6 +229,40 @@ std::vector<ScrStatement> make_statements(const NameMap& labels, Span<const ScrI
 		result.push_back(makeStatement(ins));
 
 	return result;
+}
+
+std::map<ScrValue, std::string> functions_to_names(Span<const Function> functions)
+{
+	std::map<ScrValue, std::string> result;
+
+	for (auto& function : functions)
+		result[{ (std::int32_t) function.identifier, SCR_VALTYPE_FUNCID }] = function.name;
+
+	return result;
+}
+
+void name_expression_literals(const std::map<ScrValue, std::string>& names, Span<std::unique_ptr<ScrExpr>> exprs)
+{
+	for (auto& expr : exprs)
+	{
+		if (expr->is_literal())
+		{
+			auto it = names.find(expr->literal);
+
+			if (it != names.end())
+				expr = make_named_expr(std::string(it->second));
+		}
+		else if (expr->is_compound())
+		{
+			name_expression_literals(names, expr->compound.children);
+		}
+	}
+}
+
+void name_literals(const std::map<ScrValue, std::string>& names, Span<ScrStatement> statements)
+{
+	for (auto& statement : statements)
+		name_expression_literals(names, statement.children);
 }
 
 } // namespace mary
@@ -322,6 +360,8 @@ int main(int argc, char** argv)
 			auto funcPatterns = mary::pattern::get_function_patterns(funcs);
 			auto rules = mary::pattern::get_decompile_rules(funcPatterns);
 
+			auto names = mary::functions_to_names(funcs);
+
 			for (auto& chunk : riff.chunks)
 			{
 				if (chunk.name == "CODE")
@@ -333,6 +373,8 @@ int main(int argc, char** argv)
 					{
 						auto statements = mary::pattern::reduce_statements(
 							rules, mary::make_statements(anal.labels, chunk.second));
+
+						mary::name_literals(names, statements);
 
 						for (auto& stmt : statements)
 							mary::print_statement(std::cout, stmt);
