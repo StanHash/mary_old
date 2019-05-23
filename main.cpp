@@ -150,7 +150,7 @@ void print_opcode_statement(std::ostream& out, const ScrStatement& statement)
 void print_statement(std::ostream& out, const ScrStatement& statement)
 {
 	if (statement.has_label())
-		std::cout << statement.label << ": " << std::endl;
+		std::cout << statement.label << ":" << std::endl;
 
 	std::cout << "    ";
 
@@ -265,6 +265,100 @@ void name_literals(const std::map<ScrValue, std::string>& names, Span<ScrStateme
 		name_expression_literals(names, statement.children);
 }
 
+using ScrBasicBlock = std::vector<ScrStatement>;
+
+struct ScrFlowGraph
+{
+	// All elements have the same input (implicit) and output (explicit)
+	// The first node is always index 0, and should be the sole common dominator of all other nodes
+
+	struct Node
+	{
+		enum class Kind
+		{
+			Subgraph,
+			Basic,
+		};
+
+		Node(ScrBasicBlock&& basic)
+			: kind(Kind::Basic), basic(std::move(basic)) {}
+
+		Node(std::unique_ptr<ScrFlowGraph>&& subgraph)
+			: kind(Kind::Subgraph), subgraph(std::move(subgraph)) {}
+
+		// TODO (C++17): use std::variant
+		Kind kind;
+
+		std::unique_ptr<ScrFlowGraph> subgraph;
+		ScrBasicBlock basic;
+
+		std::vector<unsigned> outNodes;
+	};
+
+	std::vector<Node> nodes;
+
+	static constexpr unsigned end_node_ref = std::numeric_limits<unsigned>::max();
+};
+
+constexpr unsigned ScrFlowGraph::end_node_ref;
+
+ScrFlowGraph make_flow_graph(const ScrAnalysis& anal)
+{
+	ScrFlowGraph result;
+	OffsetMap<unsigned> nodeMap;
+
+	for (auto& mappedBlock : anal.linearChunks)
+	{
+		nodeMap.set(mappedBlock.first, result.nodes.size());
+		result.nodes.emplace_back(make_statements(anal.labels, mappedBlock.second));
+	}
+
+	for (auto& mappedBlock : anal.linearChunks)
+	{
+		auto& lastIns = mappedBlock.second.back();
+		auto& node = result.nodes[nodeMap.get(mappedBlock.first)->second];
+
+		auto add_offset_node = [&] (unsigned offset)
+		{
+			auto it = nodeMap.get(offset);
+
+			if (it != nodeMap.end())
+				node.outNodes.push_back(it->second);
+		};
+
+		if (lastIns.has_operand() && lastIns.is_jump())
+		{
+			// this is a jump with operand, add node referred by operand
+			add_offset_node(lastIns.operand);
+		}
+
+		if (!lastIns.is_end())
+		{
+			// this is not an end, add node just after
+			add_offset_node(lastIns.offset + lastIns.encoded_size());
+		}
+
+		if (lastIns.opcode == SCR_OPCODE_END)
+		{
+			// this is the end, add end "node"
+			node.outNodes.push_back(ScrFlowGraph::end_node_ref);
+		}
+
+		// TODO: if (lastIns.opcode == SCR_OPCODE_SWITCH)
+	}
+
+	return result;
+}
+
+/*
+ * On generating subgraphs:
+ * Algorithm idea:
+ * Take the first node that isn't a subgraph (maybe?)
+ * that node and everything between it and its immediate postdominator (excluded) becomes a subgraph
+ * but how do I find that immediate postdominator?
+ * using http://www.hipersoft.rice.edu/grads/publications/dom14.pdf
+ */
+
 } // namespace mary
 
 struct ProgramOptions
@@ -369,17 +463,66 @@ int main(int argc, char** argv)
 					auto script = mary::decode_script({ chunk.data.data() + 4, chunk.data.size() - 4});
 					auto anal = mary::analyse_script(script);
 
-					for (auto& chunk : anal.linearChunks)
+					auto flow = mary::make_flow_graph(anal);
+
+					for (unsigned i = 0; i < flow.nodes.size(); ++i)
 					{
-						auto statements = mary::pattern::reduce_statements(
-							rules, mary::make_statements(anal.labels, chunk.second));
+						auto& node = flow.nodes[i];
 
-						mary::name_literals(names, statements);
+						switch (node.kind) {
 
-						for (auto& stmt : statements)
-							mary::print_statement(std::cout, stmt);
+						case mary::ScrFlowGraph::Node::Kind::Basic:
+						{
+							std::cout << "/* --- BASIC " << i << " --- */" << std::endl;
 
-						std::cout << "/* ------------ */" << std::endl;
+							node.basic = mary::pattern::reduce_statements(rules, std::move(node.basic));
+							mary::name_literals(names, node.basic);
+
+							for (auto& stmt : node.basic)
+								mary::print_statement(std::cout, stmt);
+
+							std::cout << "/* --- OUT ";
+
+							for (unsigned j = 0; j < node.outNodes.size(); ++j)
+							{
+								if (j > 0)
+									std::cout << ", ";
+
+								if (node.outNodes[j] == mary::ScrFlowGraph::end_node_ref)
+									std::cout << "end";
+								else
+									std::cout << node.outNodes[j];
+							}
+
+							if (node.outNodes.empty())
+								std::cout << "-";
+
+							std::cout << " --- */" << std::endl;
+							break;
+						}
+
+						case mary::ScrFlowGraph::Node::Kind::Subgraph:
+						{
+							break;
+						}
+
+						} // switch switch (node.kind)
+					}
+
+					if (false) // yay for dead code
+					{
+						for (auto& chunk : anal.linearChunks)
+						{
+							std::cout << "/* ------ " << chunk.first << " ------ */" << std::endl;
+
+							auto statements = mary::pattern::reduce_statements(
+								rules, mary::make_statements(anal.labels, chunk.second));
+
+							mary::name_literals(names, statements);
+
+							for (auto& stmt : statements)
+								mary::print_statement(std::cout, stmt);
+						}
 					}
 				}
 			}
