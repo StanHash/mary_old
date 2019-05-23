@@ -9,24 +9,28 @@ set(CMAKE_MODULE_PATH
 	${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
 )
 
-find_package(RE2C REQUIRED)
-find_package(BISON REQUIRED)
+find_package(RE2C)
+find_package(BISON)
 
-RE2C_TARGET(
-	NAME MARY_LEX
+if (RE2C_FOUND)
+    RE2C_TARGET(
+        NAME MARY_LEX
 
-	INPUT "${CMAKE_CURRENT_SOURCE_DIR}/lang/parser.re.yy"
-	OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/lang/parser.yy"
+        INPUT "${CMAKE_CURRENT_SOURCE_DIR}/lang/parser.re.yy"
+        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/lang/parser.yy"
 
-	DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/lang/parse.h"
-)
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/lang/parse.h"
+    )
+endif ()
 
-BISON_TARGET(
-	MARY_PARSE
+if (BISON_FOUND)
+    BISON_TARGET(
+        MARY_PARSE
 
-	"${CMAKE_CURRENT_SOURCE_DIR}/lang/parser.yy"
-	"${CMAKE_CURRENT_SOURCE_DIR}/lang/parser.cpp"
-)
+        "${CMAKE_CURRENT_SOURCE_DIR}/lang/parser.yy"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lang/parser.cpp"
+    )
+endif ()
 
 set(SOURCE_LIST
     "main.cpp"

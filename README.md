@@ -34,9 +34,11 @@ Right now the only working part of the actual language is function declarations 
 
 ## Compiling `mary`
 
-Having `cmake`, `bison`, `re2c` and a working C++14 compiler:
+Having CMake and a working C++14 compiler:
 
     mkdir build
     cd build
     cmake ..
     cmake --build .
+
+If you want to edit/rebuild the parser ([`lang/parser.re.yy`](lang/parser.re.yy)), you'll also need to have GNU Bison and RE2C in you path.
